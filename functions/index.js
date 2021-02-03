@@ -1,33 +1,34 @@
 // See https://github.com/dialogflow/dialogflow-fulfillment-nodejs
 // for Dialogflow fulfillment library docs, samples, and to report issues
 'use strict';
- 
+
 const functions = require('firebase-functions');
-const {WebhookClient} = require('dialogflow-fulfillment');
-const {Card, Suggestion} = require('dialogflow-fulfillment');
- 
+const { WebhookClient } = require('dialogflow-fulfillment');
+const { Card, Suggestion } = require('dialogflow-fulfillment');
+
 process.env.DEBUG = 'dialogflow:debug'; // enables lib debugging statements
- 
+
 exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, response) => {
 	const agent = new WebhookClient({ request, response });
 	console.log('Dialogflow Request headers: ' + JSON.stringify(request.headers));
 	console.log('Dialogflow Request body: ' + JSON.stringify(request.body));
- 
+
 	let MAX_RETRIES = 3
- 
+
 	function welcome(agent) {
 		console.log('contexts', agent.contexts);
 		console.log('parameters', agent.parameters);
-		let {fulfillmentText} = request.body.queryResult;
-		if(!agent.parameters){
-			  agent.add(fulfillmentText);
-			  return;
+		let { fulfillmentText } = request.body.queryResult;
+		if (!agent.parameters) {
+			agent.add(fulfillmentText);
+			return;
 		}
-		for(let param in agent.parameters) {
-			if(!agent.parameters[param]) {
-				if(!agent.getContext(param+'_retries')) {
-					console.log('setting context: ', param+'_retries')
-					agent.setContext({name: param+'_retries', lifespan: '5', parameters: {
+		for (let param in agent.parameters) {
+			if (!agent.parameters[param]) {
+				if (!agent.context.get(param + '_retries')) {
+					console.log('setting context: ', param + '_retries')
+					agent.context.set({
+						name: param + '_retries', lifespan: '5', parameters: {
 							retries_left: MAX_RETRIES
 						}
 					})
@@ -36,19 +37,20 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
 					return
 				}
 				else {
-					let {retries_left} = agent.getContext(param+'_retries').parameters
-					if(--retries_left === 0) {
+					let { retries_left } = agent.context.get(param + '_retries').parameters
+					if (--retries_left === 0) {
 						agent.add(`Uh oh! You failed to provide a valid value for ${param}`)
 						// doesn't work
 						// agent.clearOutgoingContexts()
-						for(let context of agent.contexts) {
-							agent.setContext({name: context.name, lifespan: '0'})
+						for (let context of agent.contexts) {
+							agent.context.set({ name: context.name, lifespan: '0' })
 						}
 						return
 					}
 					// tell the user that they failed to provide a valid value
 					agent.add(`${request.body.queryResult.queryText} isn\'t a valid ${param}`)
-					agent.setContext({name: param+'_retries', lifespan: '5', parameters: {
+					agent.context.set({
+						name: param + '_retries', lifespan: '5', parameters: {
 							retries_left: retries_left
 						}
 					})
@@ -58,16 +60,16 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
 
 			else {
 				// parameter fulfilled
-				if(agent.getContext(param+'_retries')) {
-					console.log('clearing context ', param+'_retries')
+				if (agent.context.get(param + '_retries')) {
+					console.log('clearing context ', param + '_retries')
 					// for some reason agent.clearContext doesn't work
-					agent.setContext({name: param+'_retries', lifespan: '0'})
+					agent.context.set({ name: param + '_retries', lifespan: '0' })
 				}
 			}
 		}
 		agent.add(fulfillmentText)
 	}
- 
+
 	function fallback(agent) {
 		agent.add(`I didn't understand`);
 		agent.add(`I'm sorry, can you try again?`);
@@ -88,7 +90,7 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
 	//   );
 	//   agent.add(new Suggestion(`Quick Reply`));
 	//   agent.add(new Suggestion(`Suggestion`));
-	//   agent.setContext({ name: 'weather', lifespan: 2, parameters: { city: 'Rome' }});
+	//   agent.context.set({ name: 'weather', lifespan: 2, parameters: { city: 'Rome' }});
 	// }
 
 	// // Uncomment and edit to make your own Google Assistant intent handler
